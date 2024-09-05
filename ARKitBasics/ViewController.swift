@@ -16,27 +16,25 @@ class ViewController: UIViewController, ARSCNViewDelegate, ARSessionDelegate {
     @IBOutlet weak var sessionInfoLabel: UILabel!
     @IBOutlet weak var sceneView: ARSCNView!
 
+    var currentObjectNode: SCNNode?
+    
     // MARK: - View Life Cycle
 
     /// - Tag: StartARSession
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
 
-        // Start the view's AR session with a configuration that uses the rear camera,
-        // device position and orientation tracking, and plane detection.
         let configuration = ARWorldTrackingConfiguration()
         configuration.planeDetection = [.horizontal, .vertical]
-        sceneView.session.run(configuration)
-
-        // Set a delegate to track the number of plane anchors for providing UI feedback.
+        sceneView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
         sceneView.session.delegate = self
-        
-        // Prevent the screen from being dimmed after a while as users will likely
-        // have long periods of interaction without touching the screen or buttons.
         UIApplication.shared.isIdleTimerDisabled = true
-        
-        // Show debug UI to view performance metrics (e.g. frames per second).
         sceneView.showsStatistics = true
+
+        // Setup tap gesture recognizer
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        sceneView.addGestureRecognizer(tapGesture)
+        
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -44,6 +42,44 @@ class ViewController: UIViewController, ARSCNViewDelegate, ARSessionDelegate {
 
         // Pause the view's AR session.
         sceneView.session.pause()
+    }
+    
+    @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+        let location = gesture.location(in: sceneView)
+        let hitTestResults = sceneView.hitTest(location, types: .existingPlaneUsingExtent)
+
+        if let hitTestResult = hitTestResults.first {
+            addObject(at: hitTestResult)
+        }
+    }
+    
+    func addObject(at hitTestResult: ARHitTestResult) {
+        // Remove the existing object
+        currentObjectNode?.removeFromParentNode()
+        
+        // Create a new object node
+        let objectNode = createObjectNode()
+
+        // Apply the hit test result's transform to the node.
+        objectNode.simdTransform = hitTestResult.worldTransform
+
+        // Add the new node to the scene
+        sceneView.scene.rootNode.addChildNode(objectNode)
+
+        // Update the current object node reference
+        currentObjectNode = objectNode
+    }
+    
+    func createObjectNode() -> SCNNode {
+        let boxGeometry = SCNBox(width: 0.1, height: 0.1, length: 0.1, chamferRadius: 0)
+        let material = SCNMaterial()
+        material.diffuse.contents = UIColor.red
+        boxGeometry.materials = [material]
+
+        let node = SCNNode(geometry: boxGeometry)
+        // Correctly set the pivot if needed
+        node.pivot = SCNMatrix4MakeTranslation(0, -0.05, 0) // Adjust depending on the geometry center
+        return node
     }
 
     // MARK: - ARSCNViewDelegate
